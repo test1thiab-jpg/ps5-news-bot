@@ -152,9 +152,24 @@ bot.command('news', async (ctx) => {
   }
 });
 
-// إحصائيات البوت
+// معرف المطور (يُضبط من متغير OWNER_ID في لوحة Render)
+const OWNER_ID = String(process.env.OWNER_ID || '').trim();
+
+// معرف المستخدم (أداة مساعدة)
+bot.command('myid', async (ctx) => {
+  try {
+    await ctx.reply(`🆔 معرفك: \`${ctx.from.id}\``, { parse_mode: 'Markdown' });
+  } catch (e) {
+    console.error('خطأ myid:', e.message);
+  }
+});
+
+// إحصائيات البوت (للمطور فقط)
 bot.command('stats', async (ctx) => {
   try {
+    if (OWNER_ID && String(ctx.from.id) !== OWNER_ID) {
+      return ctx.reply('🔒 هذه الميزة متاحة للمطور فقط.').catch(() => {});
+    }
     const s = getStats();
     await ctx.reply(
       '📊 *إحصائيات بوت نبض فايف*\n\n' +
