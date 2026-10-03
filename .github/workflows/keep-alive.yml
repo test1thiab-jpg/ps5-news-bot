@@ -1,0 +1,24 @@
+name: keep-alive
+
+# زيارة رابط البوت كل 5 دقايق عشان سيرفر Render المجاني ما ينام
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: إيقاظ السيرفر
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 https://ps5-news-bot.onrender.com/ping)
+          echo "HTTP $code"
+          sleep 30
+          code2=$(curl -s -o /dev/null -w "%{http_code}" --max-time 90 https://ps5-news-bot.onrender.com/ping)
+          echo "HTTP (second) $code2"
+          if [ "$code" = "200" ] || [ "$code2" = "200" ]; then
+            echo "✅ البوت صاحي"
+          else
+            echo "⚠️ ما رد — بيستيقظ بالمحاولة الجاية"
+          fi
