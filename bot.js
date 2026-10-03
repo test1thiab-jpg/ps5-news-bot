@@ -1,6 +1,7 @@
 // bot.js — بوت تيليجرام: أخبار ألعاب PlayStation مترجمة للعربي
 const { Telegraf } = require('telegraf');
 const { getNewNews, getLatestNews, formatNews } = require('./news');
+const { recordUser, recordGroup, recordUse, getStats } = require('./stats');
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
@@ -33,6 +34,7 @@ bot.telegram
   .setMyCommands([
     { command: 'start', description: '🚀 رسالة البداية' },
     { command: 'news', description: '📰 آخر أخبار ألعاب PS5 مترجمة' },
+    { command: 'stats', description: '📊 إحصائيات البوت' },
     { command: 'help', description: '❓ طريقة الاستخدام' },
   ])
   .then(() => console.log('📋 قائمة الأوامر مسجلة عند تيليجرام.'))
@@ -77,6 +79,7 @@ async function activateGroup(chatId) {
   const already = getGroupId();
   if (already === String(chatId)) return;
   setGroupId(chatId);
+  recordGroup(chatId); // نسجّله في الإحصائيات كمجموعة جديدة
   console.log('🎮 تم تفعيل المجموعة:', chatId);
   await bot.telegram
     .sendMessage(
@@ -98,9 +101,11 @@ async function activateGroup(chatId) {
 bot.start((ctx) => ctx.reply(WELCOME));
 bot.help((ctx) => ctx.reply(WELCOME));
 
-// أي رسالة تصير داخل مجموعة → فعّل الأخبار تلقائياً (بدون أمر)
+// أي تحديث: نسجّل المستخدم والاستخدام، ونفعّل المجموعة تلقائياً
 bot.use(async (ctx, next) => {
   try {
+    if (ctx.from) recordUser(ctx.from.id);
+    if (ctx.update.message || ctx.update.callback_query) recordUse();
     const chat = ctx.chat;
     if (
       chat &&
@@ -144,6 +149,28 @@ bot.command('news', async (ctx) => {
   } catch (err) {
     console.error('خطأ news:', err.message);
     await ctx.reply('⚠️ صار خطأ في جلب الأخبار، جرب بعد شوي.').catch(() => {});
+  }
+});
+
+// إحصائيات البوت
+bot.command('stats', async (ctx) => {
+  try {
+    const s = getStats();
+    await ctx.reply(
+      '📊 *إحصائيات بوت نبض فايف*\n\n' +
+        '📅 *اليوم:*\n' +
+        `👤 مستخدمين استخدموا البوت: *${s.usersToday}*\n` +
+        `🆕 مجموعات جديدة انضافت: *${s.newGroupsToday}*\n` +
+        `📈 استخدامات اليوم: *${s.usesToday}*\n\n` +
+        '🌍 *الإجمالي:*\n' +
+        `👥 إجمالي المستخدمين: *${s.totalUsers}*\n` +
+        `📁 إجمالي المجموعات: *${s.totalGroups}*\n` +
+        `🔢 إجمالي الاستخدامات: *${s.totalUses}*`,
+      { parse_mode: 'Markdown' }
+    );
+  } catch (err) {
+    console.error('خطأ stats:', err.message);
+    await ctx.reply('⚠️ صار خطأ في جلب الإحصائيات.').catch(() => {});
   }
 });
 
