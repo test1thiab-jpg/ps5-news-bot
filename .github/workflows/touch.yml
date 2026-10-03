@@ -1,0 +1,24 @@
+name: daily-touch
+
+# تحديث يومي يحفظ نشاط المستودع عشان جدولة GitHub ما تتعطل تلقائياً بعد 60 يوم
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  touch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: تحديث ملف النشاط
+        run: |
+          date -u > keep-alive.log
+          git config user.name "bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add keep-alive.log
+          git commit -m "keep alive $(date -u +%Y-%m-%d)" || echo "لا تغيير"
+          git push
