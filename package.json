@@ -1,12 +1,14 @@
 {
-  "name": "telegram-photo-bot",
+  "name": "ps5-news-bot",
   "version": "1.0.0",
   "private": true,
-  "description": "بوت تيليجرام يحسّن الصور ويكتب عليها نص",
+  "description": "بوت تيليجرام لأخبار ألعاب PlayStation مترجمة للعربي",
   "main": "bot.js",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "start": "node bot.js",
-    "test": "node test-local.js"
+    "start": "node bot.js"
   },
   "dependencies": {
     "express": "^5.2.1",
