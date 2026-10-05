@@ -21,6 +21,15 @@ if (!TOKEN) {
 
 const bot = new Telegraf(TOKEN);
 
+// سجل داخلي (يُقرأ من /logs على السيرفر للتشخيص)
+const recentLogs = [];
+function log(...args) {
+  const line = new Date().toISOString().slice(11, 19) + ' ' + args.join(' ');
+  recentLogs.push(line);
+  if (recentLogs.length > 200) recentLogs.shift();
+  console.log(line);
+}
+
 const GROUP_FILE = path.join(__dirname, 'group.txt');
 
 const WELCOME = `🎮 أهلين بك في بوت نبض فايف — أخبار ألعاب PlayStation!
@@ -98,12 +107,18 @@ async function activateGroup(chatId) {
 // ------------------------------------------------------------
 // أوامر
 // ------------------------------------------------------------
-bot.start((ctx) => ctx.reply(WELCOME));
-bot.help((ctx) => ctx.reply(WELCOME));
 
-// أي تحديث: نسجّل المستخدم والاستخدام، ونفعّل المجموعة تلقائياً
+// أول ميدلوير: تسجيل كل تحديث + إحصائيات + تفعيل المجموعات تلقائياً
 bot.use(async (ctx, next) => {
   try {
+    log(
+      '📩 تحديث:',
+      ctx.updateType,
+      '| chat:',
+      (ctx.chat && ctx.chat.id) || '-',
+      '| from:',
+      (ctx.from && ctx.from.id) || '-'
+    );
     if (ctx.from) recordUser(ctx.from.id);
     if (ctx.update.message || ctx.update.callback_query) recordUse();
     const chat = ctx.chat;
@@ -115,10 +130,13 @@ bot.use(async (ctx, next) => {
       await activateGroup(chat.id);
     }
   } catch (e) {
-    console.error('خطأ تفعيل تلقائي:', e.message);
+    log('⚠️ خطأ ميدلوير:', e.message);
   }
   return next();
 });
+
+bot.start((ctx) => ctx.reply(WELCOME));
+bot.help((ctx) => ctx.reply(WELCOME));
 
 // عند إضافة البوت لمجموعة جديدة → يفعّل نفسه فوراً
 bot.on('my_chat_member', async (ctx) => {
@@ -173,9 +191,9 @@ function saveStatus() {
 // معرف المستخدم (أداة مساعدة)
 bot.command('myid', async (ctx) => {
   try {
-    await ctx.reply(`🆔 معرفك: \`${ctx.from.id}\``, { parse_mode: 'Markdown' });
+    await ctx.reply('🆔 معرفك: ' + ctx.from.id);
   } catch (e) {
-    console.error('خطأ myid:', e.message);
+    log('خطأ myid:', e.message);
   }
 });
 
@@ -208,16 +226,15 @@ bot.command('status', async (ctx) => {
       }
     };
     await ctx.reply(
-      '🔧 *حالة البوت*\n\n' +
+      '🔧 حالة البوت\n\n' +
         `📬 المجموعة: ${groupId ? 'مفعّلة ✅ (' + groupId + ')' : 'غير مفعّلة ❌'}\n` +
         `⏱️ آخر فحص للأخبار: ${fmt(lastTickTime)}\n` +
         `📤 آخر إرسال للمجموعة: ${fmt(lastSentTime)}\n` +
         `📚 أخبار مسجّلة بالمقروء: ${seenCount}\n` +
-        '🌐 السيرفر: Render (سحابي)',
-      { parse_mode: 'Markdown' }
+        '🌐 السيرفر: Render (سحابي)'
     );
   } catch (e) {
-    console.error('خطأ status:', e.message);
+    log('خطأ status:', e.message);
     await ctx.reply('⚠️ صار خطأ في جلب الحالة.').catch(() => {});
   }
 });
@@ -230,19 +247,18 @@ bot.command('stats', async (ctx) => {
     }
     const s = getStats();
     await ctx.reply(
-      '📊 *إحصائيات بوت نبض فايف*\n\n' +
-        '📅 *اليوم:*\n' +
-        `👤 مستخدمين استخدموا البوت: *${s.usersToday}*\n` +
-        `🆕 مجموعات جديدة انضافت: *${s.newGroupsToday}*\n` +
-        `📈 استخدامات اليوم: *${s.usesToday}*\n\n` +
-        '🌍 *الإجمالي:*\n' +
-        `👥 إجمالي المستخدمين: *${s.totalUsers}*\n` +
-        `📁 إجمالي المجموعات: *${s.totalGroups}*\n` +
-        `🔢 إجمالي الاستخدامات: *${s.totalUses}*`,
-      { parse_mode: 'Markdown' }
+      '📊 إحصائيات بوت نبض فايف\n\n' +
+        '📅 اليوم:\n' +
+        `👤 مستخدمين استخدموا البوت: ${s.usersToday}\n` +
+        `🆕 مجموعات جديدة انضافت: ${s.newGroupsToday}\n` +
+        `📈 استخدامات اليوم: ${s.usesToday}\n\n` +
+        '🌍 الإجمالي:\n' +
+        `👥 إجمالي المستخدمين: ${s.totalUsers}\n` +
+        `📁 إجمالي المجموعات: ${s.totalGroups}\n` +
+        `🔢 إجمالي الاستخدامات: ${s.totalUses}`
     );
   } catch (err) {
-    console.error('خطأ stats:', err.message);
+    log('خطأ stats:', err.message);
     await ctx.reply('⚠️ صار خطأ في جلب الإحصائيات.').catch(() => {});
   }
 });
@@ -256,7 +272,7 @@ bot.on('text', (ctx) => {
     .catch(() => {});
 });
 
-bot.catch((err) => console.error('Bot error:', err.message));
+bot.catch((err) => log('Bot error:', err.message));
 
 // ------------------------------------------------------------
 // الجدولة: فحص الأخبار كل 15 دقيقة وإرسالها للمجموعة
@@ -313,6 +329,11 @@ if (PORT) {
   });
 
   app.use(bot.webhookCallback('/webhook'));
+
+  // صفحة السجل الداخلي (للتشخيص)
+  app.get('/logs', (req, res) => {
+    res.type('text/plain').send(recentLogs.slice(-60).join('\n') || '(لا سجلات)');
+  });
 
   app.listen(PORT, () => {
     console.log('🌐 وضع السحابة: الخادم شغال على المنفذ', PORT);
