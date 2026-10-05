@@ -83,24 +83,26 @@ async function sendNewsToChat(chatId, items) {
   }
 }
 
-// تفعيل مجموعة تلقائياً وإرسال آخر الأخبار فوراً
+// تفعيل مجموعة/قناة تلقائياً وإرسال آخر الأخبار فوراً
 async function activateGroup(chatId) {
   const already = getGroupId();
   if (already === String(chatId)) return;
   setGroupId(chatId);
   recordGroup(chatId); // نسجّله في الإحصائيات كمجموعة جديدة
-  console.log('🎮 تم تفعيل المجموعة:', chatId);
-  await bot.telegram
-    .sendMessage(
+  log('🎮 تفعيل الدردشة:', chatId);
+  try {
+    await bot.telegram.sendMessage(
       chatId,
       '🎮 تم تفعيل أخبار PS5 هنا تلقائياً! ✅\n\n⏳ جاري جلب آخر الأخبار...'
-    )
-    .catch(() => {});
+    );
+  } catch (e) {
+    log('⚠️ فشل إرسال رسالة التفعيل (تحقق من صلاحيات البوت):', e.message);
+  }
   try {
     const items = await getLatestNews();
     await sendNewsToChat(chatId, items);
   } catch (e) {
-    console.error('خطأ جلب أول أخبار:', e.message);
+    log('خطأ جلب أول أخبار:', e.message);
   }
 }
 
@@ -124,7 +126,7 @@ bot.use(async (ctx, next) => {
     const chat = ctx.chat;
     if (
       chat &&
-      (chat.type === 'group' || chat.type === 'supergroup') &&
+      (chat.type === 'group' || chat.type === 'supergroup' || chat.type === 'channel') &&
       getGroupId() !== String(chat.id)
     ) {
       await activateGroup(chat.id);
@@ -138,20 +140,20 @@ bot.use(async (ctx, next) => {
 bot.start((ctx) => ctx.reply(WELCOME));
 bot.help((ctx) => ctx.reply(WELCOME));
 
-// عند إضافة البوت لمجموعة جديدة → يفعّل نفسه فوراً
+// عند إضافة البوت لمجموعة/قناة جديدة → يفعّل نفسه فوراً
 bot.on('my_chat_member', async (ctx) => {
   try {
     const upd = ctx.update.my_chat_member;
     const chat = upd.chat;
     const newStatus = upd.new_chat_member.status;
     if (
-      (chat.type === 'group' || chat.type === 'supergroup') &&
+      (chat.type === 'group' || chat.type === 'supergroup' || chat.type === 'channel') &&
       (newStatus === 'member' || newStatus === 'administrator')
     ) {
       await activateGroup(chat.id);
     }
   } catch (e) {
-    console.error('خطأ my_chat_member:', e.message);
+    log('خطأ my_chat_member:', e.message);
   }
 });
 
