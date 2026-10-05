@@ -155,12 +155,70 @@ bot.command('news', async (ctx) => {
 // معرف المطور (يُضبط من متغير OWNER_ID في لوحة Render)
 const OWNER_ID = String(process.env.OWNER_ID || '').trim();
 
+// حالة التشغيل (لأمر /status)
+const STATUS_FILE = path.join(__dirname, 'status.json');
+let lastTickTime = null;
+let lastSentTime = null;
+try {
+  const st = JSON.parse(fs.readFileSync(STATUS_FILE, 'utf8'));
+  lastSentTime = st.lastSent || null;
+} catch {}
+
+function saveStatus() {
+  try {
+    fs.writeFileSync(STATUS_FILE, JSON.stringify({ lastSent: lastSentTime }));
+  } catch {}
+}
+
 // معرف المستخدم (أداة مساعدة)
 bot.command('myid', async (ctx) => {
   try {
     await ctx.reply(`🆔 معرفك: \`${ctx.from.id}\``, { parse_mode: 'Markdown' });
   } catch (e) {
     console.error('خطأ myid:', e.message);
+  }
+});
+
+// حالة البوت (للمطور فقط)
+bot.command('status', async (ctx) => {
+  try {
+    if (OWNER_ID && String(ctx.from.id) !== OWNER_ID) {
+      return ctx.reply('🔒 هذه الميزة متاحة للمطور فقط.').catch(() => {});
+    }
+    const groupId = getGroupId();
+    let seenCount = 0;
+    try {
+      seenCount = Object.keys(JSON.parse(fs.readFileSync(path.join(__dirname, 'seen.json'), 'utf8'))).length;
+    } catch {}
+    const fmt = (t) => {
+      if (!t) return '—';
+      try {
+        return new Intl.DateTimeFormat('ar', {
+          calendar: 'gregory',
+          timeZone: 'Asia/Riyadh',
+          day: 'numeric',
+          month: 'numeric',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        }).format(new Date(t));
+      } catch {
+        return String(t);
+      }
+    };
+    await ctx.reply(
+      '🔧 *حالة البوت*\n\n' +
+        `📬 المجموعة: ${groupId ? 'مفعّلة ✅ (' + groupId + ')' : 'غير مفعّلة ❌'}\n` +
+        `⏱️ آخر فحص للأخبار: ${fmt(lastTickTime)}\n` +
+        `📤 آخر إرسال للمجموعة: ${fmt(lastSentTime)}\n` +
+        `📚 أخبار مسجّلة بالمقروء: ${seenCount}\n` +
+        '🌐 السيرفر: Render (سحابي)',
+      { parse_mode: 'Markdown' }
+    );
+  } catch (e) {
+    console.error('خطأ status:', e.message);
+    await ctx.reply('⚠️ صار خطأ في جلب الحالة.').catch(() => {});
   }
 });
 
@@ -201,20 +259,23 @@ bot.on('text', (ctx) => {
 bot.catch((err) => console.error('Bot error:', err.message));
 
 // ------------------------------------------------------------
-// الجدولة: فحص الأخبار كل دقيقتين وإرسالها للمجموعة
+// الجدولة: فحص الأخبار كل 15 دقيقة وإرسالها للمجموعة
 // ------------------------------------------------------------
 async function newsTick() {
   try {
     const groupId = getGroupId();
+    lastTickTime = new Date().toISOString();
+
     if (!groupId) {
-      // لا مجموعة بعد، نسجّل الحالي بصمت عشان ما يفيض لاحقاً
-      await getNewNews();
+      // لا مجموعة بعد — ما نسجّل الأخبار (ننتظر تفعيل المجموعة عشان ما نفوّت أخبار)
       return;
     }
 
     const fresh = await getNewNews();
     if (fresh.length) {
       await sendNewsToChat(groupId, fresh);
+      lastSentTime = new Date().toISOString();
+      saveStatus();
       console.log(`📰 أرسلت ${fresh.length} خبر جديد للمجموعة.`);
     }
   } catch (err) {
