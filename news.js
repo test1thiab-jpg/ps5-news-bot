@@ -174,21 +174,24 @@ async function translatePair(title, desc, target = 'ar') {
 }
 
 // ------------------------------------------------------------
-// إدارة الأخبار المقروءة
+// إدارة الأخبار المقروءة (حالة دائمة على القرص تتحمل إعادة التشغيل والنوم)
 // ------------------------------------------------------------
-function loadSeen() {
+function loadState() {
   try {
-    return JSON.parse(fs.readFileSync(SEEN_FILE, 'utf8'));
+    const raw = JSON.parse(fs.readFileSync(SEEN_FILE, 'utf8'));
+    if (raw && typeof raw === 'object' && 'initialized' in raw) {
+      return { initialized: !!raw.initialized, seen: raw.seen || {} };
+    }
+    // صيغة قديمة: نعتبرها مهيأة
+    return { initialized: true, seen: raw || {} };
   } catch {
-    return {};
+    return { initialized: false, seen: {} };
   }
 }
 
-function saveSeen(seen) {
-  fs.writeFileSync(SEEN_FILE, JSON.stringify(seen));
+function saveState(st) {
+  fs.writeFileSync(SEEN_FILE, JSON.stringify(st));
 }
-
-let firstRun = true;
 
 // مواضيع نعتبرها غير "أخبار" ونتجاهلها (بودكاست وحصص تفاعلية وغيرها)
 const EXCLUDE = [
@@ -220,19 +223,23 @@ async function collectNews() {
   return uniq;
 }
 
-/** الأخبار الجديدة فقط (أول تشغيل يسجّل الحالي بدون إرسال) */
+/** الأخبار الجديدة فقط (التهيئة الصامتة مرة واحدة وتُحفظ، فلا تتكرر بعد النوم) */
 async function getNewNews() {
-  const seen = loadSeen();
+  const st = loadState();
   const all = await collectNews();
 
-  const fresh = all.filter((i) => !seen[i.link]);
-  fresh.forEach((i) => (seen[i.link] = true));
-  saveSeen(seen);
+  const fresh = all.filter((i) => !st.seen[i.link]);
 
-  if (firstRun) {
-    firstRun = false;
+  if (!st.initialized) {
+    // أول تشغيل على الإطلاق: نسجّل الحالي بدون إرسال
+    fresh.forEach((i) => (st.seen[i.link] = true));
+    st.initialized = true;
+    saveState(st);
     return [];
   }
+
+  fresh.forEach((i) => (st.seen[i.link] = true));
+  saveState(st);
   return fresh.slice(0, 5);
 }
 

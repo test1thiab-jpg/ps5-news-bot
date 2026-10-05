@@ -21,13 +21,22 @@ if (!TOKEN) {
 
 const bot = new Telegraf(TOKEN);
 
-// سجل داخلي (يُقرأ من /logs على السيرفر للتشخيص)
+// سجل داخلي (يُقرأ من /logs على السيرفر للتشخيص) — يحفظ أيضاً بملف دائم
+const LOG_FILE = path.join(__dirname, 'logs.txt');
 const recentLogs = [];
 function log(...args) {
   const line = new Date().toISOString().slice(11, 19) + ' ' + args.join(' ');
   recentLogs.push(line);
   if (recentLogs.length > 200) recentLogs.shift();
   console.log(line);
+  try {
+    fs.appendFileSync(LOG_FILE, new Date().toISOString() + ' ' + args.join(' ') + '\n');
+    const st = fs.statSync(LOG_FILE);
+    if (st.size > 150 * 1024) {
+      const lines = fs.readFileSync(LOG_FILE, 'utf8').split('\n');
+      fs.writeFileSync(LOG_FILE, lines.slice(-800).join('\n'));
+    }
+  } catch {}
 }
 
 const GROUP_FILE = path.join(__dirname, 'group.txt');
@@ -334,7 +343,32 @@ if (PORT) {
 
   // صفحة السجل الداخلي (للتشخيص)
   app.get('/logs', (req, res) => {
-    res.type('text/plain').send(recentLogs.slice(-60).join('\n') || '(لا سجلات)');
+    let header = '=== حالة الملفات ===\n';
+    try {
+      header += 'group.txt: ' + (fs.readFileSync(GROUP_FILE, 'utf8').trim() || '(فارغ)') + '\n';
+    } catch {
+      header += 'group.txt: (غير موجود)\n';
+    }
+    try {
+      const s = JSON.parse(fs.readFileSync(path.join(__dirname, 'seen.json'), 'utf8'));
+      const cnt = Object.keys(s.seen || s).length;
+      header += 'seen.json: initialized=' + ('initialized' in s ? !!s.initialized : true) + ' | count=' + cnt + '\n';
+    } catch {
+      header += 'seen.json: (غير موجود)\n';
+    }
+    try {
+      header += 'status.json: ' + fs.readFileSync(STATUS_FILE, 'utf8').trim() + '\n';
+    } catch {
+      header += 'status.json: (غير موجود)\n';
+    }
+    let fileLogs = '';
+    try {
+      const lines = fs.readFileSync(LOG_FILE, 'utf8').split('\n');
+      fileLogs = lines.slice(-50).join('\n');
+    } catch {}
+    res
+      .type('text/plain')
+      .send(header + '\n=== آخر السجلات ===\n' + (fileLogs || recentLogs.slice(-40).join('\n') || '(لا سجلات)'));
   });
 
   app.listen(PORT, () => {
