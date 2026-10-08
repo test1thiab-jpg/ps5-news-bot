@@ -162,7 +162,63 @@ async function translate(text, target = 'ar') {
   );
   if (out) { lastBackend = 'google-chrome'; return out; }
 
-  // 3) DeepL (موثوق من السيرفرات السحابية — مفتاح مجاني من deepl.com)
+  // 3) Bing (غير رسمي لكن يشتغل غالباً من السيرفرات السحابية)
+  try {
+    const bingUrls = [
+      'https://www.bing.com/ttranslatev3?isVertical=1&&IG=&IID=translator.5028.1',
+      'https://www.bing.com/ttranslatev3?isVertical=1&&IG=&IID=translator.5028',
+    ];
+    for (const url of bingUrls) {
+      try {
+        const body = new URLSearchParams();
+        body.append('fromLang', 'auto-detect');
+        body.append('text', t);
+        body.append('to', target === 'ar' ? 'ar' : target);
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...UA },
+          body: body.toString(),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const out = data && data[0] && data[0].translations && data[0].translations[0] && data[0].translations[0].text;
+          if (out) {
+            lastBackend = 'bing';
+            return cleanArabic(out);
+          }
+          lastAttempts.push('bing: استجابة بدون ترجمة');
+        } else {
+          lastAttempts.push('bing: HTTP ' + res.status);
+        }
+      } catch (e) {
+        lastAttempts.push('bing: ' + e.message);
+      }
+    }
+  } catch {}
+
+  // 4) Lingva (واجهات عامة لجوجل ترجمة)
+  const lingvaHosts = ['https://lingva.ml', 'https://translate.plausibility.cloud', 'https://lingva.lunar.icu'];
+  for (const host of lingvaHosts) {
+    try {
+      const res = await fetch(host + '/api/v1/auto/' + target + '/' + encodeURIComponent(t), {
+        headers: UA,
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.translation) {
+          lastBackend = 'lingva';
+          return cleanArabic(data.translation);
+        }
+        lastAttempts.push(host + ': بدون ترجمة');
+      } else {
+        lastAttempts.push(host + ': HTTP ' + res.status);
+      }
+    } catch (e) {
+      lastAttempts.push(host + ': ' + e.message);
+    }
+  }
+
+  // 5) DeepL (موثوق — مفتاح مجاني من deepl.com)
   const deepLKey = String(process.env.DEEPL_KEY || '').trim();
   if (deepLKey) {
     try {
@@ -190,7 +246,7 @@ async function translate(text, target = 'ar') {
     }
   }
 
-  // 4) احتياطي MyMemory
+  // 6) احتياطي MyMemory
   try {
     const url =
       'https://api.mymemory.translated.net/get?q=' +
@@ -210,7 +266,7 @@ async function translate(text, target = 'ar') {
     lastAttempts.push('mymemory: ' + e.message);
   }
 
-  // 5) احتياطي LibreTranslate (مثيلات عامة)
+  // 7) احتياطي LibreTranslate (مثيلات عامة)
   const libreHosts = [
     'https://translate.argosopentech.com',
     'https://libretranslate.de',
