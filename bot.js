@@ -1,6 +1,6 @@
 // bot.js — بوت تيليجرام: أخبار ألعاب PlayStation مترجمة للعربي
 const { Telegraf } = require('telegraf');
-const { getNewNews, getLatestNews, formatNews, setLogger, lastBackend } = require('./news');
+const { getNewNews, getLatestNews, formatNews, translate, setLogger, lastBackend } = require('./news');
 const { recordUser, recordGroup, recordUse, getStats } = require('./stats');
 const fs = require('fs');
 const path = require('path');
