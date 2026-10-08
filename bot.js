@@ -1,6 +1,7 @@
 // bot.js — بوت تيليجرام: أخبار ألعاب PlayStation مترجمة للعربي
 const { Telegraf } = require('telegraf');
-const { getNewNews, getLatestNews, formatNews, translate, setLogger, lastBackend, lastAttempts } = require('./news');
+const newsMod = require('./news');
+const { getNewNews, getLatestNews, formatNews, translate, setLogger } = newsMod;
 const { recordUser, recordGroup, recordUse, getStats } = require('./stats');
 const fs = require('fs');
 const path = require('path');
@@ -364,7 +365,7 @@ if (PORT) {
     } catch {
       header += 'status.json: (غير موجود)\n';
     }
-    header += 'آخر مترجم نجح: ' + lastBackend + '\n';
+    header += 'آخر مترجم نجح: ' + newsMod.lastBackend + '\n';
     let fileLogs = '';
     try {
       const lines = fs.readFileSync(LOG_FILE, 'utf8').split('\n');
@@ -375,16 +376,30 @@ if (PORT) {
       .send(header + '\n=== آخر السجلات ===\n' + (fileLogs || recentLogs.slice(-40).join('\n') || '(لا سجلات)'));
   });
 
-  // اختبار الترجمة من السيرفر نفسه (للتشخيص)
+  // اختبار الترجمة والاتصال من السيرفر نفسه (للتشخيص)
   app.get('/testtranslate', async (req, res) => {
+    const lines = [];
+    try {
+      const r1 = await fetch('https://example.com');
+      lines.push('example.com: HTTP ' + r1.status);
+    } catch (e) {
+      lines.push('example.com: ' + e.message);
+    }
+    try {
+      const r2 = await fetch('https://api.ipify.org');
+      lines.push('IP العام: ' + (await r2.text()));
+    } catch (e) {
+      lines.push('ipify: ' + e.message);
+    }
     try {
       const out = await translate('Sony announces new PS5 games lineup for this month');
-      res
-        .type('text/plain')
-        .send('backend: ' + lastBackend + '\nالمحاولات: ' + lastAttempts.join(' | ') + '\nالنتيجة: ' + out);
+      lines.push('backend: ' + newsMod.lastBackend);
+      lines.push('المحاولات: ' + newsMod.lastAttempts.join(' | '));
+      lines.push('النتيجة: ' + out);
     } catch (e) {
-      res.type('text/plain').send('خطأ: ' + e.message);
+      lines.push('خطأ ترجمة: ' + e.message);
     }
+    res.type('text/plain').send(lines.join('\n'));
   });
 
   app.listen(PORT, () => {
