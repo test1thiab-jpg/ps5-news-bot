@@ -375,7 +375,43 @@ async function collectNews() {
       uniq.push(i);
     }
   }
+  // ترتيب بالأحدث أولاً (تاريخ ISO يقارن نصياً صح)
+  uniq.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
   return uniq;
+}
+
+// تاريخ اليوم بتوقيت السعودية بصيغة YYYY-MM-DD
+function todayKeyRiyadh() {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Riyadh' }).format(new Date());
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
+}
+
+// هل الخبر من اليوم؟ (بتوقيت السعودية)
+function isToday(dateStr) {
+  if (!dateStr) return false;
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Riyadh' }).format(new Date(dateStr)) === todayKeyRiyadh();
+  } catch {
+    return false;
+  }
+}
+
+/** أخبار اليوم فقط (بحد أقصى 5) */
+async function getTodayNews() {
+  const all = await collectNews();
+  return all.filter((i) => isToday(i.date)).slice(0, 5);
+}
+
+/** أخبار آخر 7 أيام (بحد أقصى 5) */
+async function getWeekNews() {
+  const all = await collectNews();
+  const now = Date.now();
+  return all
+    .filter((i) => i.date && now - new Date(i.date).getTime() < 7 * 24 * 3600 * 1000)
+    .slice(0, 5);
 }
 
 /** الأخبار الجديدة فقط (التهيئة الصامتة مرة واحدة وتُحفظ، فلا تتكرر بعد النوم) */
@@ -449,6 +485,8 @@ async function formatNews(item) {
 module.exports = {
   getNewNews,
   getLatestNews,
+  getTodayNews,
+  getWeekNews,
   formatNews,
   translate,
   setLogger,

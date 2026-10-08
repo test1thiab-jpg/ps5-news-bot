@@ -1,7 +1,7 @@
 // bot.js — بوت تيليجرام: أخبار ألعاب PlayStation مترجمة للعربي
 const { Telegraf } = require('telegraf');
 const newsMod = require('./news');
-const { getNewNews, getLatestNews, formatNews, translate, setLogger } = newsMod;
+const { getNewNews, getLatestNews, getTodayNews, getWeekNews, formatNews, translate, setLogger } = newsMod;
 const { recordUser, recordGroup, recordUse, getStats } = require('./stats');
 const fs = require('fs');
 const path = require('path');
@@ -54,7 +54,7 @@ const WELCOME = `🎮 أهلين بك في بوت نبض فايف — أخبار
 bot.telegram
   .setMyCommands([
     { command: 'start', description: '🚀 رسالة البداية' },
-    { command: 'news', description: '📰 آخر أخبار ألعاب PS5 مترجمة' },
+    { command: 'news', description: '📰 أخبار اليوم (آخر الأخبار)' },
     { command: 'stats', description: '📊 إحصائيات البوت' },
     { command: 'help', description: '❓ طريقة الاستخدام' },
   ])
@@ -111,7 +111,18 @@ async function activateGroup(chatId) {
     log('⚠️ فشل إرسال رسالة التفعيل (تحقق من صلاحيات البوت):', e.message);
   }
   try {
-    const items = await getLatestNews();
+    // نفضّل أخبار اليوم، وإذا ما فيه نرسل آخر المتوفر مع تنبيه
+    let items = await getTodayNews();
+    if (!items.length) {
+      items = await getLatestNews();
+      if (items.length) {
+        await bot.telegram
+          .sendMessage(chatId, '📅 لا توجد أخبار جديدة اليوم — هذه آخر الأخبار المتوفرة:')
+          .catch(() => {});
+      }
+    } else {
+      await bot.telegram.sendMessage(chatId, '📅 أخبار اليوم:').catch(() => {});
+    }
     await sendNewsToChat(chatId, items);
   } catch (e) {
     log('خطأ جلب أول أخبار:', e.message);
@@ -169,18 +180,53 @@ bot.on('my_chat_member', async (ctx) => {
   }
 });
 
-// آخر الأخبار يدوياً
+// آخر أخبار اليوم يدوياً (إذا ما فيه أخبار اليوم → خيار عرض أسبوع)
 bot.command('news', async (ctx) => {
   try {
-    await ctx.reply('⏳ جاري جلب آخر أخبار PS5 وترجمتها...');
-    const items = await getLatestNews();
-    if (!items.length) {
-      return ctx.reply('ما قدرت أجيب أخبار الحين، جرب بعد شوي.').catch(() => {});
+    await ctx.reply('⏳ جاري جلب أخبار اليوم...');
+    const today = await getTodayNews();
+    if (today.length) {
+      await ctx.reply('📅 أخبار اليوم:');
+      await sendNewsToChat(ctx.chat.id, today);
+      return;
     }
-    await sendNewsToChat(ctx.chat.id, items);
+    // لا أخبار اليوم → أزرار خيار
+    await ctx.reply('📭 لا توجد أخبار جديدة اليوم.\n\nتبغى تشوف آخر أخبار من الأسبوع الماضي؟', {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '📅 آخر 5 أخبار (آخر أسبوع)', callback_data: 'weeknews' }],
+          [{ text: '❌ لا شكراً', callback_data: 'nonews' }],
+        ],
+      },
+    });
   } catch (err) {
-    console.error('خطأ news:', err.message);
+    log('خطأ news:', err.message);
     await ctx.reply('⚠️ صار خطأ في جلب الأخبار، جرب بعد شوي.').catch(() => {});
+  }
+});
+
+// زر: عرض أخبار الأسبوع
+bot.action('weeknews', async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    const items = await getWeekNews();
+    if (!items.length) {
+      return ctx.reply('🤷‍♂️ ما فيه أخبار حتى بالأسبوع الماضي.').catch(() => {});
+    }
+    await ctx.reply('📅 هذه آخر أخبار الأسبوع:');
+    await sendNewsToChat(ctx.chat.id, items);
+  } catch (e) {
+    log('خطأ weeknews:', e.message);
+  }
+});
+
+// زر: لا شكراً
+bot.action('nonews', async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    await ctx.reply('تمام 👍 أول خبر جديد بيوصلك تلقائياً!');
+  } catch (e) {
+    log('خطأ nonews:', e.message);
   }
 });
 
