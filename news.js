@@ -180,13 +180,15 @@ async function translate(text, target = 'ar') {
           body: body.toString(),
         });
         if (res.ok) {
-          const data = await res.json();
+          const rawText = await res.text();
+          let data = null;
+          try { data = JSON.parse(rawText); } catch { lastAttempts.push('bing: رد غير JSON: ' + rawText.slice(0, 120)); }
           const out = data && data[0] && data[0].translations && data[0].translations[0] && data[0].translations[0].text;
           if (out) {
             lastBackend = 'bing';
             return cleanArabic(out);
           }
-          lastAttempts.push('bing: استجابة بدون ترجمة');
+          lastAttempts.push('bing: شكل غير متوقع: ' + rawText.slice(0, 150));
         } else {
           lastAttempts.push('bing: HTTP ' + res.status);
         }
