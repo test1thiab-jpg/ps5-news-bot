@@ -1,6 +1,6 @@
 // bot.js — بوت تيليجرام: أخبار ألعاب PlayStation مترجمة للعربي
 const { Telegraf } = require('telegraf');
-const { getNewNews, getLatestNews, formatNews, translate, setLogger, lastBackend } = require('./news');
+const { getNewNews, getLatestNews, formatNews, translate, setLogger, lastBackend, lastAttempts } = require('./news');
 const { recordUser, recordGroup, recordUse, getStats } = require('./stats');
 const fs = require('fs');
 const path = require('path');
@@ -379,7 +379,9 @@ if (PORT) {
   app.get('/testtranslate', async (req, res) => {
     try {
       const out = await translate('Sony announces new PS5 games lineup for this month');
-      res.type('text/plain').send('backend: ' + lastBackend + '\nالنتيجة: ' + out);
+      res
+        .type('text/plain')
+        .send('backend: ' + lastBackend + '\nالمحاولات: ' + lastAttempts.join(' | ') + '\nالنتيجة: ' + out);
     } catch (e) {
       res.type('text/plain').send('خطأ: ' + e.message);
     }

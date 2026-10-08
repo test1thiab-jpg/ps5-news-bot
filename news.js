@@ -124,28 +124,45 @@ function setLogger(fn) {
 
 // آخر مترجم نجح (للتشخيص)
 let lastBackend = 'none';
+let lastAttempts = [];
 
 async function translate(text, target = 'ar') {
   const t = String(text).trim();
   if (!t) return '';
+  lastAttempts = [];
 
-  // 1) جوجل (الأفضل جودة)
-  try {
-    const url =
-      'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=' +
-      target + '&dt=t&q=' + encodeURIComponent(t);
-    const res = await fetch(url, { headers: UA });
-    if (res.ok) {
-      const data = await res.json();
-      const out = cleanArabic((data[0] || []).map((seg) => seg[0]).join(''));
-      if (out) {
-        lastBackend = 'google';
-        return out;
+  const tryGoogle = async (url) => {
+    try {
+      const res = await fetch(url, { headers: UA });
+      if (res.ok) {
+        const data = await res.json();
+        const out = cleanArabic((data[0] || []).map((seg) => seg[0]).join(''));
+        if (out) return out;
+        lastAttempts.push('google: json فارغ');
+      } else {
+        lastAttempts.push('google: HTTP ' + res.status);
       }
+    } catch (e) {
+      lastAttempts.push('google: ' + e.message);
     }
-  } catch {}
+    return null;
+  };
 
-  // 2) احتياطي MyMemory
+  // 1) جوجل gtx
+  let out = await tryGoogle(
+    'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=' +
+      target + '&dt=t&q=' + encodeURIComponent(t)
+  );
+  if (out) { lastBackend = 'google'; return out; }
+
+  // 2) جوجل dict-chrome-ex (يشتغل غالباً حتى لو الأول محجوب)
+  out = await tryGoogle(
+    'https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=auto&tl=' +
+      target + '&q=' + encodeURIComponent(t)
+  );
+  if (out) { lastBackend = 'google-chrome'; return out; }
+
+  // 3) احتياطي MyMemory
   try {
     const url =
       'https://api.mymemory.translated.net/get?q=' +
@@ -157,10 +174,15 @@ async function translate(text, target = 'ar') {
         lastBackend = 'mymemory';
         return cleanArabic(data.responseData.translatedText);
       }
+      lastAttempts.push('mymemory: استجابة بدون ترجمة');
+    } else {
+      lastAttempts.push('mymemory: HTTP ' + res.status);
     }
-  } catch {}
+  } catch (e) {
+    lastAttempts.push('mymemory: ' + e.message);
+  }
 
-  // 3) احتياطي LibreTranslate (مثيلات عامة)
+  // 4) احتياطي LibreTranslate (مثيلات عامة)
   const libreHosts = [
     'https://translate.argosopentech.com',
     'https://libretranslate.de',
@@ -179,8 +201,13 @@ async function translate(text, target = 'ar') {
           lastBackend = 'libretranslate';
           return cleanArabic(data.translatedText);
         }
+        lastAttempts.push(host + ': بدون ترجمة');
+      } else {
+        lastAttempts.push(host + ': HTTP ' + res.status);
       }
-    } catch {}
+    } catch (e) {
+      lastAttempts.push(host + ': ' + e.message);
+    }
   }
 
   logger('⚠️ فشلت كل المترجمين — النص يرجع بالأصل:', t.slice(0, 60));
@@ -329,4 +356,12 @@ async function formatNews(item) {
   return text;
 }
 
-module.exports = { getNewNews, getLatestNews, formatNews, translate, setLogger, get lastBackend() { return lastBackend; } };
+module.exports = {
+  getNewNews,
+  getLatestNews,
+  formatNews,
+  translate,
+  setLogger,
+  get lastBackend() { return lastBackend; },
+  get lastAttempts() { return lastAttempts; },
+};
