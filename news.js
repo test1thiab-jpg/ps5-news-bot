@@ -162,7 +162,35 @@ async function translate(text, target = 'ar') {
   );
   if (out) { lastBackend = 'google-chrome'; return out; }
 
-  // 3) احتياطي MyMemory
+  // 3) DeepL (موثوق من السيرفرات السحابية — مفتاح مجاني من deepl.com)
+  const deepLKey = String(process.env.DEEPL_KEY || '').trim();
+  if (deepLKey) {
+    try {
+      const body = new URLSearchParams();
+      body.append('text', t);
+      body.append('target_lang', target.toUpperCase() === 'AR' ? 'AR' : target.toUpperCase());
+      const res = await fetch('https://api-free.deepl.com/v2/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...UA },
+        body: body.toString(),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const out = data.translations && data.translations[0] && data.translations[0].text;
+        if (out) {
+          lastBackend = 'deepl';
+          return cleanArabic(out);
+        }
+        lastAttempts.push('deepl: استجابة بدون ترجمة');
+      } else {
+        lastAttempts.push('deepl: HTTP ' + res.status);
+      }
+    } catch (e) {
+      lastAttempts.push('deepl: ' + e.message);
+    }
+  }
+
+  // 4) احتياطي MyMemory
   try {
     const url =
       'https://api.mymemory.translated.net/get?q=' +
@@ -182,7 +210,7 @@ async function translate(text, target = 'ar') {
     lastAttempts.push('mymemory: ' + e.message);
   }
 
-  // 4) احتياطي LibreTranslate (مثيلات عامة)
+  // 5) احتياطي LibreTranslate (مثيلات عامة)
   const libreHosts = [
     'https://translate.argosopentech.com',
     'https://libretranslate.de',
