@@ -116,11 +116,20 @@ function cleanArabic(s) {
     .trim();
 }
 
+// مسجّل خارجي (يربطه bot.js بسجله الدائم)
+let logger = (...args) => console.log(...args);
+function setLogger(fn) {
+  logger = fn;
+}
+
+// آخر مترجم نجح (للتشخيص)
+let lastBackend = 'none';
+
 async function translate(text, target = 'ar') {
   const t = String(text).trim();
   if (!t) return '';
 
-  // جوجل (الأفضل جودة)
+  // 1) جوجل (الأفضل جودة)
   try {
     const url =
       'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=' +
@@ -129,11 +138,14 @@ async function translate(text, target = 'ar') {
     if (res.ok) {
       const data = await res.json();
       const out = cleanArabic((data[0] || []).map((seg) => seg[0]).join(''));
-      if (out) return out;
+      if (out) {
+        lastBackend = 'google';
+        return out;
+      }
     }
   } catch {}
 
-  // احتياطي MyMemory
+  // 2) احتياطي MyMemory
   try {
     const url =
       'https://api.mymemory.translated.net/get?q=' +
@@ -142,11 +154,37 @@ async function translate(text, target = 'ar') {
     if (res.ok) {
       const data = await res.json();
       if (data.responseData && data.responseData.translatedText) {
+        lastBackend = 'mymemory';
         return cleanArabic(data.responseData.translatedText);
       }
     }
   } catch {}
 
+  // 3) احتياطي LibreTranslate (مثيلات عامة)
+  const libreHosts = [
+    'https://translate.argosopentech.com',
+    'https://libretranslate.de',
+    'https://translate.fedilab.app',
+  ];
+  for (const host of libreHosts) {
+    try {
+      const res = await fetch(host + '/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...UA },
+        body: JSON.stringify({ q: t, source: 'auto', target, format: 'text' }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.translatedText) {
+          lastBackend = 'libretranslate';
+          return cleanArabic(data.translatedText);
+        }
+      }
+    } catch {}
+  }
+
+  logger('⚠️ فشلت كل المترجمين — النص يرجع بالأصل:', t.slice(0, 60));
+  lastBackend = 'failed';
   return t;
 }
 
@@ -291,4 +329,4 @@ async function formatNews(item) {
   return text;
 }
 
-module.exports = { getNewNews, getLatestNews, formatNews, translate };
+module.exports = { getNewNews, getLatestNews, formatNews, translate, setLogger, get lastBackend() { return lastBackend; } };

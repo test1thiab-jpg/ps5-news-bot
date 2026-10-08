@@ -1,6 +1,6 @@
 // bot.js — بوت تيليجرام: أخبار ألعاب PlayStation مترجمة للعربي
 const { Telegraf } = require('telegraf');
-const { getNewNews, getLatestNews, formatNews } = require('./news');
+const { getNewNews, getLatestNews, formatNews, setLogger, lastBackend } = require('./news');
 const { recordUser, recordGroup, recordUse, getStats } = require('./stats');
 const fs = require('fs');
 const path = require('path');
@@ -38,6 +38,8 @@ function log(...args) {
     }
   } catch {}
 }
+
+setLogger(log); // ربط سجل news.js بالسجل الدائم للبوت
 
 const GROUP_FILE = path.join(__dirname, 'group.txt');
 
@@ -292,6 +294,7 @@ async function newsTick() {
   try {
     const groupId = getGroupId();
     lastTickTime = new Date().toISOString();
+    log('⏰ فحص الأخبار | مجموعة:', groupId || 'لا');
 
     if (!groupId) {
       // لا مجموعة بعد — ما نسجّل الأخبار (ننتظر تفعيل المجموعة عشان ما نفوّت أخبار)
@@ -303,10 +306,10 @@ async function newsTick() {
       await sendNewsToChat(groupId, fresh);
       lastSentTime = new Date().toISOString();
       saveStatus();
-      console.log(`📰 أرسلت ${fresh.length} خبر جديد للمجموعة.`);
+      log(`📰 أرسلت ${fresh.length} خبر جديد للمجموعة.`);
     }
   } catch (err) {
-    console.error('خطأ في الجدولة:', err.message);
+    log('خطأ في الجدولة:', err.message);
   }
 }
 
@@ -361,6 +364,7 @@ if (PORT) {
     } catch {
       header += 'status.json: (غير موجود)\n';
     }
+    header += 'آخر مترجم نجح: ' + lastBackend + '\n';
     let fileLogs = '';
     try {
       const lines = fs.readFileSync(LOG_FILE, 'utf8').split('\n');
@@ -369,6 +373,16 @@ if (PORT) {
     res
       .type('text/plain')
       .send(header + '\n=== آخر السجلات ===\n' + (fileLogs || recentLogs.slice(-40).join('\n') || '(لا سجلات)'));
+  });
+
+  // اختبار الترجمة من السيرفر نفسه (للتشخيص)
+  app.get('/testtranslate', async (req, res) => {
+    try {
+      const out = await translate('Sony announces new PS5 games lineup for this month');
+      res.type('text/plain').send('backend: ' + lastBackend + '\nالنتيجة: ' + out);
+    } catch (e) {
+      res.type('text/plain').send('خطأ: ' + e.message);
+    }
   });
 
   app.listen(PORT, () => {
