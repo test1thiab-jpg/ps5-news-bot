@@ -229,7 +229,11 @@ async function translate(text, target = 'ar') {
       body.append('target_lang', target.toUpperCase() === 'AR' ? 'AR' : target.toUpperCase());
       const res = await fetch('https://api-free.deepl.com/v2/translate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...UA },
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Authorization: 'DeepL-Auth-Key ' + deepLKey,
+          ...UA,
+        },
         body: body.toString(),
       });
       if (res.ok) {
